@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Two Truths and One Lie</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="game-container">
+    <div class="setup">
+      <h2>Host Controls</h2>
+      <p class="instructions">Players will join using their mobile devices. Create a room (QR), have participants scan it to join, then click <strong>Start Voting</strong> when ready.</p>
+
+      <div class="setup-actions">
+        <button id="sample-data-btn">Generate Sample Data</button>
+        <button id="start-voting-btn">Start Voting</button>
+        <button id="reset-btn">Reset</button>
+      </div>
+
+      <div class="setup-actions" style="margin-top:10px;">
+        <button id="create-room-btn">Create Room (QR)</button>
+        <input id="public-url" type="text" value="https://stool-gooey-aversion.ngrok-free.dev" placeholder="Public base URL (optional, e.g. https://abcd.ngrok.io)" style="width:260px; margin-left:10px;" />
+        <div id="qr-container" style="display:inline-block; vertical-align:middle; margin-left:10px;"></div>
+      </div>
+
+      <div id="queued-rounds" class="queued-rounds"></div>
+      <div id="selected-players" class="selected-players hidden"></div>
+    </div>
+
+    <h1 id="topic-title">Two Truths and One Lie</h1>
+    <p class="subtitle">Players join via mobile. Host controls are on the left — create a room, then start voting.</p>
+
+    <div id="cards-container" class="cards-container"></div>
+
+    <div id="voting-area" class="voting-area hidden">
+      <h2 id="voting-player-name">Player</h2>
+      <div id="voting-instructions" class="vote-instructions">Waiting for live votes from mobile...</div>
+      <div id="voting-cards" class="cards-container"></div>
+      <button id="next-btn" class="hidden">Proceed</button>
+    </div>
+
+    <div id="round-results" class="results-area hidden"></div>
+    <div id="results-area" class="results-area hidden"></div>
+  </div>
+
+  <div id="name-spinner" class="name-spinner hidden" aria-hidden="true"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
