@@ -30,13 +30,17 @@
     </div>
 
     <h1 id="topic-title">Two Truths and One Lie</h1>
-    <p class="subtitle">Players join via mobile. Host controls are on the left — create a room, then start voting.</p>
+    <p class="subtitle hidden">Players join via mobile. Host controls are on the left — create a room, then start voting.</p>
+
+    <audio id="bgm" autoplay loop>
+      <source src="roomhost-bg-03.mp3" type="audio/mpeg">
+    </audio>
 
     <div id="cards-container" class="cards-container"></div>
 
     <div id="voting-area" class="voting-area hidden">
       <h2 id="voting-player-name">Player</h2>
-      <div id="voting-instructions" class="vote-instructions">Waiting for live votes from mobile...</div>
+      <div id="voting-instructions" class="vote-instructions hidden">Waiting for live votes from mobile...</div>
       <div id="voting-cards" class="cards-container"></div>
       <button id="next-btn" class="hidden">Proceed</button>
     </div>

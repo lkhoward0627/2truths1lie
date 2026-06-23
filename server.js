@@ -48,8 +48,16 @@ io.on('connection', (socket) => {
       room.clients.push(socket.id);
     }
 
-    // store player server-side
-    room.players.push(player);
+    // check if player already joined (rejoin scenario)
+    const existingPlayer = room.players.find(p => p.name === player.name);
+    if (existingPlayer) {
+      // player reconnecting, update their info
+      existingPlayer.statements = player.statements;
+      console.log('player rejoined:', player.name);
+    } else {
+      // new player
+      room.players.push(player);
+    }
 
     // notify host in the room
     io.to(roomId).emit('player-joined', { player });

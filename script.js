@@ -55,19 +55,29 @@ function loadVotingForPlayer(player) {
   votingPlayerName.textContent = player.name;
   currentRoundPlayer = player;
 
-  // Prepare shuffled view mapping to original indexes
   const indexed = player.statements.map((s, i) => ({ ...s, origIndex: i }));
-  const shuffled = shuffleArray(indexed);
+  const statementClasses = ['statement-orange', 'statement-green', 'statement-purple'];
+  shuffleArray(indexed);
 
-  shuffled.forEach((statement) => {
+  indexed.forEach((statement, idx) => {
     const card = document.createElement('div');
     card.classList.add('card', 'read-only');
     card.dataset.originalIndex = statement.origIndex;
+    const statementClass = statementClasses[idx];
+    let barColor = '#038130';
+
+    if (statementClass === 'statement-orange') {
+      barColor = '#fe4701';
+    } else if (statementClass === 'statement-purple') {
+      barColor = '#6931c8';
+    }
+    card.classList.add(statementClass);
+
     card.innerHTML = `
       <div class="text">${statement.text}</div>
       <div class="vote-row">
-        <span class="vote-label">Votes: <strong class="vote-num">${statement.votes || 0}</strong></span>
-        <div class="vote-bar"><div class="vote-fill" style="width: ${statement.votes ? Math.min(statement.votes * 20, 100) : 0}%"></div></div>
+        <!-- <span class="vote-label">Votes: <strong class="vote-num">${statement.votes || 0}</strong></span> -->
+        <!-- <div class="vote-bar"><div class="vote-fill" style="width: ${statement.votes ? Math.min(statement.votes * 20, 100) : 0}%; background: ${barColor};"></div></div> -->
       </div>
     `;
 
@@ -106,7 +116,6 @@ function broadcastCurrentPlayer(player) {
 
 function appendRoundSummary(player) {
   if (!roundResults) return;
-  roundResults.classList.remove('hidden');
   const entry = document.createElement('div');
   entry.className = 'player-results';
   entry.innerHTML = `
@@ -163,42 +172,118 @@ function animateNameSelection(names, chosenName, onSelected) {
   cloud.className = 'name-cloud';
   spinner.appendChild(cloud);
 
+  // Grid-based non-overlapping layout
+  const cols = Math.ceil(Math.sqrt(names.length * 1.3));
+  const rows = Math.ceil(names.length / cols);
+  const cellWidth = 100 / cols;
+  const cellHeight = 100 / rows;
+  const positions = [];
+
+  // Create shuffled indices to distribute names randomly across grid
+  const indices = Array.from({ length: names.length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  // Assign grid positions
+  indices.forEach((nameIdx, gridIdx) => {
+    const row = Math.floor(gridIdx / cols);
+    const col = gridIdx % cols;
+    
+    // Base grid position with slight randomization within cell
+    const cellPadding = Math.min(cellWidth, cellHeight) * 0.15;
+    const left = col * cellWidth + cellPadding + Math.random() * (cellWidth - 2 * cellPadding);
+    const top = row * cellHeight + cellPadding + Math.random() * (cellHeight - 2 * cellPadding);
+    
+    positions[nameIdx] = { left, top };
+  });
+
   const chips = [];
   names.forEach((nm, i) => {
     const c = document.createElement('div');
     c.className = 'name-chip floating';
     c.textContent = nm;
-    // random position inside cloud (avoid edges)
-    const left = 5 + Math.random() * 90;
-    const top = 5 + Math.random() * 90;
-    c.style.left = left + '%';
-    c.style.top = top + '%';
+    const pos = positions[i];
+    c.style.left = pos.left + '%';
+    c.style.top = pos.top + '%';
     c.style.animationDuration = (3 + Math.random() * 3) + 's';
     cloud.appendChild(c);
     chips.push(c);
   });
 
-  const runMs = 2000 + Math.floor(Math.random() * 1200);
   const finalIndex = names.indexOf(finalName);
   const targetIndex = finalIndex >= 0 ? finalIndex : Math.floor(Math.random() * names.length);
+  const floatDuration = 2000 + Math.floor(Math.random() * 1200);
 
-  // after runMs, fade others and highlight chosen
+  // Start lottery-style cycling after initial float
   setTimeout(() => {
-    chips.forEach((c, idx) => {
-      if (idx === targetIndex) {
-        c.classList.add('chosen');
-        c.classList.remove('faded');
-      } else {
-        c.classList.add('faded');
-      }
-    });
+    // Stop floating animation
+    chips.forEach(c => c.classList.remove('floating'));
 
-    setTimeout(() => {
-      spinner.classList.add('hidden');
-      if (gameContainer) gameContainer.style.visibility = '';
-      onSelected(names[targetIndex]);
-    }, 900);
-  }, runMs);
+    // Rapidly cycle through random bubbles (Mark Six style)
+    const cycleTimeMs = 300; // Duration of each highlight
+    const totalCycleMs = 2400; // Total time for cycling
+    const cycleCount = Math.floor(totalCycleMs / cycleTimeMs);
+    let cycleIdx = 0;
+    const cycledIndices = [];
+    
+    // Generate random sequence of indices to cycle through
+    for (let i = 0; i < cycleCount; i++) {
+      cycledIndices.push(Math.floor(Math.random() * names.length));
+    }
+    // End with the target
+    cycledIndices.push(targetIndex);
+
+    const cycleInterval = setInterval(() => {
+      if (cycleIdx > 0) {
+        const prevIdx = cycledIndices[cycleIdx - 1];
+        chips[prevIdx].style.transform = '';
+        chips[prevIdx].style.boxShadow = '';
+        chips[prevIdx].style.background = '';
+        chips[prevIdx].style.filter = '';
+      }
+      
+      const currentIdx = cycledIndices[cycleIdx];
+      // Directly apply highlight styles
+      chips[currentIdx].style.transform = 'scale(1.4)';
+      chips[currentIdx].style.background = 'linear-gradient(90deg, #ff1744, #ffeb3b)';
+      chips[currentIdx].style.boxShadow = '0 0 80px rgba(255, 23, 68, 1), 0 0 60px rgba(255, 235, 59, 1)';
+      chips[currentIdx].style.filter = 'brightness(2)';
+      cycleIdx++;
+
+      if (cycleIdx >= cycledIndices.length) {
+        clearInterval(cycleInterval);
+
+        // Final reveal: fade others, enlarge and center the chosen chip, hold for 5s
+        setTimeout(() => {
+          chips.forEach((c, idx) => {
+            // clear temporary highlight styles
+            c.style.transform = '';
+            c.style.boxShadow = '';
+            c.style.background = '';
+            c.style.filter = '';
+
+            if (idx === targetIndex) {
+              // mark chosen and ensure it transitions to center/enlarged state
+              c.classList.add('chosen');
+            } else {
+              c.classList.add('faded');
+            }
+          });
+
+          // Hold the focused state longer (5 seconds) so the selection is dramatic
+          const holdMs = 5000;
+          setTimeout(() => {
+            // Tear down spinner and restore game container after the hold
+            spinner.classList.add('hidden');
+            if (gameContainer) gameContainer.style.visibility = '';
+            onSelected(names[targetIndex]);
+          }, holdMs);
+        }, 200);
+      }
+    }, cycleTimeMs);
+  }, floatDuration);
 }
 
 function addPlayerFromForm() {
@@ -231,66 +316,74 @@ function generateSampleData() {
   players.length = 0;
   const sampleNames = [
     'Alice', 'Bob', 'Cara', 'David', 'Eva',
-    'Frank', 'Gina', 'Henry', 'Ivy', 'Jack'
+    'Frank', 'Gina', 'Henry', 'Ivy', 'Jack',
+    'Kate', 'Leo', 'Maya', 'Noah', 'Olivia',
+    'Paulo', 'Quinn', 'Riley', 'Sofia', 'Tom',
+    'Uma', 'Victor', 'Wendy', 'Xavier', 'Yasmin',
+    'Zara', 'Alex', 'Blake', 'Casey', 'Dana',
+    'Eli', 'Fiona', 'Gio', 'Harper', 'Iris',
+    'Jake', 'Kira', 'Liam', 'Morgan', 'Noel',
+    'Olive', 'Parker', 'Quinn2', 'Rory', 'Sam',
+    'Tess', 'Ulysses', 'Vera', 'Will', 'Xander',
+    'Yara', 'Zoe'
   ];
 
   const sampleStatements = [
-    [
-      'I have skydived in New Zealand',
-      'I hate pizza',
-      'I once met a movie star'
-    ],
-    [
-      'I can play the ukulele',
-      'I never learned to swim',
-      'I have been on TV'
-    ],
-    [
-      'I speak three languages',
-      'I have a pet snake',
-      'I love sushi'
-    ],
-    [
-      'I ran a marathon',
-      'I am allergic to chocolate',
-      'I have climbed a volcano'
-    ],
-    [
-      'I can juggle',
-      'I used to work in a bakery',
-      'I hate coffee'
-    ],
-    [
-      'I grew up on a farm',
-      'I have never flown in a plane',
-      'I once competed in a dance show'
-    ],
-    [
-      'I am a twin',
-      'I collect vintage records',
-      'I have travelled to Japan'
-    ],
-    [
-      'I love spicy food',
-      'I once rescued a cat from a tree',
-      'I have a black belt in karate'
-    ],
-    [
-      'I can bake macarons',
-      'I have ridden a camel',
-      'I hate roller coasters'
-    ],
-    [
-      'I have been scuba diving',
-      'I once painted a mural',
-      'I cannot ride a bike'
-    ]
+    ['I have skydived in New Zealand', 'I hate pizza', 'I once met a movie star'],
+    ['I can play the ukulele', 'I never learned to swim', 'I have been on TV'],
+    ['I speak three languages', 'I have a pet snake', 'I love sushi'],
+    ['I ran a marathon', 'I am allergic to chocolate', 'I have climbed a volcano'],
+    ['I can juggle', 'I used to work in a bakery', 'I hate coffee'],
+    ['I grew up on a farm', 'I have never flown in a plane', 'I once competed in a dance show'],
+    ['I am a twin', 'I collect vintage records', 'I have travelled to Japan'],
+    ['I love spicy food', 'I once rescued a cat from a tree', 'I have a black belt in karate'],
+    ['I can bake macarons', 'I have ridden a camel', 'I hate roller coasters'],
+    ['I have been scuba diving', 'I once painted a mural', 'I cannot ride a bike'],
+    ['I have sung karaoke in Tokyo', 'I am afraid of heights', 'I once won a cooking contest'],
+    ['I love horror movies', 'I have never eaten pizza', 'I play professional chess'],
+    ['I have been to 20+ countries', 'I hate public speaking', 'I once saw a celebrity'],
+    ['I can speak five languages', 'I love country music', 'I have a tattoo'],
+    ['I ride motorcycles', 'I hate spicy food', 'I have published a book'],
+    ['I am vegan', 'I love heavy metal', 'I have never missed a flight'],
+    ['I can do a handstand', 'I hate vegetables', 'I once met royalty'],
+    ['I love sailing', 'I am afraid of flying', 'I play in a band'],
+    ['I have a pilot\'s license', 'I hate coffee', 'I once lived abroad'],
+    ['I collect rare coins', 'I love documentaries', 'I have hiked a major peak'],
+    ['I am allergic to shellfish', 'I love jazz music', 'I once wrote a song'],
+    ['I can solve a Rubik\'s cube', 'I hate insects', 'I have volunteered overseas'],
+    ['I love painting', 'I am afraid of water', 'I once performed on stage'],
+    ['I have a weird talent', 'I love anime', 'I can pick locks'],
+    ['I have been skydiving', 'I hate small talk', 'I have a black belt'],
+    ['I love rock climbing', 'I am vegetarian', 'I once won an award'],
+    ['I can play five instruments', 'I hate horror', 'I have a secret hobby'],
+    ['I love wine tasting', 'I am afraid of spiders', 'I once backpacked solo'],
+    ['I have a rare skill', 'I love photography', 'I can cook like a chef'],
+    ['I am an early bird', 'I love mysteries', 'I have been on a cruise'],
+    ['I love gardening', 'I hate mornings', 'I play competitive sports'],
+    ['I have a photographic memory', 'I love sci-fi', 'I once taught others'],
+    ['I love hiking', 'I hate loud noises', 'I have a unique collection'],
+    ['I am a night owl', 'I love history', 'I once won at gambling'],
+    ['I love cooking', 'I hate exercise', 'I have a famous relative'],
+    ['I have a strict routine', 'I love reading', 'I once got recognition'],
+    ['I love architecture', 'I hate sitting still', 'I can speak two more languages'],
+    ['I am super organized', 'I love anime series', 'I have a secret talent'],
+    ['I love board games', 'I hate traffic', 'I once worked overseas'],
+    ['I have won a lottery', 'I love sci-fi movies', 'I can juggle five balls'],
+    ['I love trivia', 'I hate crowded places', 'I have performed professionally'],
+    ['I am ambidextrous', 'I love musicals', 'I once broke a record'],
+    ['I love poker', 'I hate waiting', 'I have a loyal pet'],
+    ['I have perfect pitch', 'I love chess', 'I once invented something'],
+    ['I love painting', 'I hate paperwork', 'I can escape handcuffs'],
+    ['I am double jointed', 'I love documentaries', 'I once did stunt work'],
+    ['I love yoga', 'I hate meetings', 'I have perfect timing'],
+    ['I have a rare blood type', 'I love music festivals', 'I can code'],
+    ['I love meditation', 'I hate social media', 'I once won a trophy']
   ];
 
   // set one lie per player in a rotating pattern
   const samplePlayers = sampleNames.map((name, index) => {
     const lieIndex = index % 3;
-    const statements = sampleStatements[index].map((text, i) => ({
+    const statements = (sampleStatements[index] || sampleStatements[index % sampleStatements.length]).map((text, i) => ({
       text,
       isLie: i === lieIndex,
       votes: 0
@@ -382,7 +475,6 @@ function initSocket() {
       hostPlayer.statements[statementIndex].votes = votes;
     }
 
-    document.getElementById('voting-instructions').textContent = 'Live votes updated. Click Reveal to show answers.';
     nextBtn.dataset.state = 'reveal';
     nextBtn.textContent = 'Reveal';
     nextBtn.classList.remove('hidden');
@@ -472,11 +564,11 @@ function startVoting() {
     return;
   }
 
-  if (players.length > 5) {
-    const selected = shuffleArray(players.slice()).slice(0, 5);
+  if (players.length > 10) {
+    const selected = shuffleArray(players.slice()).slice(0, 10);
     players.splice(0, players.length, ...selected);
     updateQueuedList();
-    topicTitle.textContent = 'Voting Time! (5 random players selected)';
+    topicTitle.textContent = 'Voting Time!';
   } else {
     topicTitle.textContent = 'Voting Time!';
   }
@@ -490,7 +582,7 @@ function startVoting() {
       pill.textContent = p.name;
       selectedPlayersDiv.appendChild(pill);
     });
-    selectedPlayersDiv.classList.remove('hidden');
+    selectedPlayersDiv.classList.add('hidden');
   }
 
   isPlaying = true;
@@ -499,8 +591,10 @@ function startVoting() {
   players.forEach(p => p.played = false);
   if (roundResults) {
     roundResults.innerHTML = '';
-    roundResults.classList.remove('hidden');
+    roundResults.classList.add('hidden');
   }
+  const votingInstructions = document.getElementById('voting-instructions');
+  if (votingInstructions) votingInstructions.classList.add('hidden');
 
   socket.emit('start-voting', { roomId: currentRoomId }, (res) => {
     if (!res || !res.ok) {
@@ -553,12 +647,30 @@ function resetGame() {
   nextBtn.classList.add('hidden');
 }
 
+function initBgm() {
+  const bgm = document.getElementById('bgm');
+  if (!bgm) return;
+  bgm.volume = 0.35;
+  const tryPlay = () => {
+    const promise = bgm.play();
+    if (promise && promise.catch) {
+      promise.catch(() => {
+        document.body.addEventListener('click', tryPlay, { once: true });
+        document.body.addEventListener('touchstart', tryPlay, { once: true });
+      });
+    }
+  };
+  tryPlay();
+}
+
 // Wire up setup buttons
 if (addPlayerBtn) addPlayerBtn.addEventListener('click', addPlayerFromForm);
 if (sampleDataBtn) sampleDataBtn.addEventListener('click', generateSampleData);
 startVotingBtn.addEventListener('click', startVoting);
 resetBtn.addEventListener('click', resetGame);
 if (createRoomBtn) createRoomBtn.addEventListener('click', createRoom);
+
+initBgm();
 
 // Next player / reveal button behavior
 nextBtn.addEventListener('click', () => {

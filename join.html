@@ -7,25 +7,31 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <audio id="bgm" autoplay loop>
+    <source src="roomhost-bg-03.mp3" type="audio/mpeg">
+  </audio>
   <div class="game-container mobile">
     <h1>Join Game</h1>
     <p class="hints">Hints: travel, hobbies, food, skills, favorites</p>
     <p id="room-info"></p>
-
-    <input id="player-name" type="text" placeholder="Your name" />
     <div class="statement-row">
-      <input id="jstmt1" type="text" placeholder="Statement 1" />
-      <label class="lie-label"><input type="radio" name="jlie" value="0" checked /><span>Lie</span></label>
+      <span style="color: #030037; font-weight: bold; margin-right: 10px; width:50px;">Name: </span>
+    <input id="player-name" type="text" placeholder="Your name" style="margin-bottom: 20px; margin-top: 10px; height: 50px;">
+    </div>
+ 
+    <div class="statement-row">
+      <span style="color: #030037; font-weight: bold; margin-right: 10px; width:50px;">Truth:</span>
+      <input id="jstmt1" type="text" placeholder="Statement 1 (Truth)" style="height:50px;" />
     </div>
     <div class="statement-row">
-      <input id="jstmt2" type="text" placeholder="Statement 2" />
-      <label class="lie-label"><input type="radio" name="jlie" value="1" /><span>Lie</span></label>
+      <span style="color: #030037; font-weight: bold; margin-right: 10px; width:50px;">Truth:</span>
+      <input id="jstmt2" type="text" placeholder="Statement 2 (Truth)" style="height:50px;"  />
     </div>
     <div class="statement-row">
-      <input id="jstmt3" type="text" placeholder="Statement 3" />
-      <label class="lie-label"><input type="radio" name="jlie" value="2" /><span>Lie</span></label>
+      <span style="color: #030037; font-weight: bold; margin-right: 10px; width:50px;">Lie:</span>
+      <input id="jstmt3" type="text" placeholder="Statement 3 (Lie)" style="height:50px;"  />
     </div>
-
+ 
     <div class="setup-actions">
       <button id="submit-join">Submit</button>
     </div>
@@ -35,6 +41,10 @@
     <div id="mobile-waiting" class="hidden"></div>
     <div id="mobile-selected" class="hidden selected-message">
       <p id="mobile-selected-message"></p>
+    </div>
+    <div id="mobile-joined" class="hidden selected-message mobile-success">
+      <span class="success-icon">✓</span>
+      <p id="mobile-joined-message"></p>
     </div>
     <div id="mobile-voting" class="hidden">
       <h2 id="mobile-vote-player"></h2>
@@ -59,22 +69,67 @@
     let mobileJoinPending = false;
     let mobileRoomValid = false;
 
+    const STORAGE_KEY = 'mobile_game_session';
+
+    function saveSession() {
+      if (mobilePlayer && mobileRoom) {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+          player: mobilePlayer,
+          room: mobileRoom,
+          joined: mobileJoined
+        }));
+      }
+    }
+
+    function loadSession() {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const session = JSON.parse(saved);
+          mobilePlayer = session.player;
+          mobileRoom = session.room;
+          mobileJoined = session.joined;
+          return true;
+        } catch (e) {
+          console.error('Failed to restore session', e);
+        }
+      }
+      return false;
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem(STORAGE_KEY);
+      mobileJoined = false;
+    }
+
     function setStatus(message, isError = false) {
       const status = document.getElementById('status');
       status.textContent = message;
       status.style.color = isError ? '#c0392b' : '#2c3e50';
     }
 
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
     function createVoteCards(player, socket, room) {
       const voteArea = document.getElementById('mobile-vote-cards');
       voteArea.innerHTML = '';
       const indexed = player.statements.map((s, i) => ({ ...s, origIndex: i }));
+      const statementClasses = ['statement-orange', 'statement-green', 'statement-purple'];
+      shuffleArray(indexed);
 
       let voteSubmitted = false;
-      indexed.forEach((statement) => {
+      indexed.forEach((statement, idx) => {
         const card = document.createElement('div');
         card.className = 'card';
         card.dataset.originalIndex = statement.origIndex;
+        const statementClass = statementClasses[idx];
+        card.classList.add(statementClass);
         card.innerHTML = `
           <div class="text">${statement.text}</div>
           <div class="status">Tap to vote</div>
@@ -135,9 +190,18 @@
           return;
         }
         mobileJoined = true;
+        saveSession();
         setStatus('Joined! Waiting for host to start voting...');
         document.getElementById('submit-join').disabled = true;
-        document.getElementById('mobile-waiting').classList.remove('hidden');
+
+        const mobileJoinedDiv = document.getElementById('mobile-joined');
+        const mobileJoinedMessage = document.getElementById('mobile-joined-message');
+        const mobileWaitingDiv = document.getElementById('mobile-waiting');
+        const gameContainer = document.querySelector('.game-container.mobile');
+        if (mobileWaitingDiv) mobileWaitingDiv.classList.add('hidden');
+        if (mobileJoinedMessage) mobileJoinedMessage.textContent = 'Thanks For Participating, Please wait the host to start';
+        if (mobileJoinedDiv) mobileJoinedDiv.classList.remove('hidden');
+        if (gameContainer) gameContainer.classList.add('joined-success');
       });
     }
 
@@ -151,7 +215,7 @@
           validateRoomAvailability();
         }
         if (mobilePlayer && mobileRoom && !mobileJoined) {
-          setStatus('Connected. Waiting for host to start voting.');
+          setStatus('Connected. Attempting to join...');
           attemptMobileJoin();
         }
       });
@@ -165,9 +229,26 @@
         setStatus('Connection timed out. Check the room URL and host server.', true);
       });
 
+      mobileSocket.on('disconnect', (reason) => {
+        console.log('Socket disconnected:', reason);
+        if (reason === 'io server disconnect') {
+          setStatus('Server disconnected. Waiting to reconnect...', true);
+        } else {
+          setStatus('Connection lost. Reconnecting...', true);
+        }
+      });
+
       mobileSocket.on('reconnect', () => {
-        setStatus('Reconnected to room server. Validating room again...');
+        console.log('Socket reconnected');
+        setStatus('Reconnected! Rejoining room...');
         validateRoomAvailability();
+        if (mobilePlayer && mobileRoom && mobileJoined) {
+          attemptMobileJoin();
+        }
+      });
+
+      mobileSocket.on('reconnect_attempt', () => {
+        setStatus('Attempting to reconnect...', true);
       });
 
       mobileSocket.on('voting-started', () => {
@@ -181,10 +262,12 @@
         const mobileVoting = document.getElementById('mobile-voting');
         const mobileSelected = document.getElementById('mobile-selected');
         const mobileSelectedMessage = document.getElementById('mobile-selected-message');
+        const mobileJoinedDiv = document.getElementById('mobile-joined');
         const mobileVotePlayer = document.getElementById('mobile-vote-player');
 
         mobileWaiting.classList.add('hidden');
         mobileSelected.classList.add('hidden');
+        if (mobileJoinedDiv) mobileJoinedDiv.classList.add('hidden');
 
         if (mobilePlayer && mobilePlayer.name === player.name) {
           mobileVoting.classList.add('hidden');
@@ -208,7 +291,6 @@
     document.addEventListener('DOMContentLoaded', () => {
       const roomInfo = document.getElementById('room-info');
       const joinButton = document.getElementById('submit-join');
-      const lieRadios = document.querySelectorAll('input[name="jlie"]');
       const mobileWaiting = document.getElementById('mobile-waiting');
       const mobileVoting = document.getElementById('mobile-voting');
       const qs = new URLSearchParams(window.location.search);
@@ -216,41 +298,54 @@
 
       joinButton.type = 'button';
 
-      if (!room) {
+      // Restore previous session if it exists
+      const hasSession = loadSession();
+
+      if (!room && !hasSession) {
         roomInfo.textContent = 'Invalid join URL. No room specified.';
         setStatus('Scan a valid QR code from the host.', true);
         joinButton.disabled = true;
         return;
       }
 
-      mobileRoom = room;
-      roomInfo.textContent = 'Joining room: ' + room;
-      setStatus('Connecting to room server...');
-      joinButton.disabled = true;
+      if (!hasSession) {
+        mobileRoom = room;
+        roomInfo.textContent = 'Joining room: ' + room;
+        setStatus('Connecting to room server...');
+        joinButton.disabled = true;
+      } else {
+        roomInfo.textContent = 'Rejoining room: ' + mobileRoom;
+        setStatus('Restoring connection...');
+        joinButton.disabled = true;
+      }
+
       if (!mobileSocket) {
         initMobileSocket();
       }
       if (mobileSocket && mobileSocket.connected) {
-        validateRoomAvailability();
+        if (mobileRoom) {
+          validateRoomAvailability();
+        }
+        if (hasSession && mobilePlayer && mobileRoom && mobileJoined) {
+          // Already joined before, try to rejoin
+          setStatus('Attempting to rejoin...');
+          attemptMobileJoin();
+        }
       }
 
-      function updateLieSelection() {
-        lieRadios.forEach((radio) => {
-          const label = radio.closest('label');
-          if (!label) return;
-          if (radio.checked) {
-            label.classList.add('selected');
+      // Handle screen lock/resume
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden === false && mobileSocket && mobileJoined && mobileRoom && mobilePlayer) {
+          // Screen woke up and we were previously joined
+          console.log('Screen resumed, reconnecting...');
+          if (!mobileSocket.connected) {
+            setStatus('Screen resumed. Reconnecting...', false);
           } else {
-            label.classList.remove('selected');
+            setStatus('Ready to vote.', false);
+            attemptMobileJoin();
           }
-        });
-      }
-
-      lieRadios.forEach((radio) => {
-        radio.addEventListener('change', updateLieSelection);
+        }
       });
-
-      updateLieSelection();
 
       joinButton.addEventListener('click', () => {
         if (!mobileRoomValid) {
@@ -262,7 +357,6 @@
         const s1 = document.getElementById('jstmt1').value.trim();
         const s2 = document.getElementById('jstmt2').value.trim();
         const s3 = document.getElementById('jstmt3').value.trim();
-        const lie = document.querySelector('input[name="jlie"]:checked').value;
 
         if (!name || !s1 || !s2 || !s3) {
           setStatus('Please fill name and all statements.', true);
@@ -272,9 +366,9 @@
         mobilePlayer = {
           name,
           statements: [
-            { text: s1, isLie: Number(lie) === 0, votes: 0 },
-            { text: s2, isLie: Number(lie) === 1, votes: 0 },
-            { text: s3, isLie: Number(lie) === 2, votes: 0 }
+            { text: s1, isLie: false, votes: 0 },
+            { text: s2, isLie: false, votes: 0 },
+            { text: s3, isLie: true, votes: 0 }
           ]
         };
 
@@ -293,6 +387,21 @@
           attemptMobileJoin();
         }
       });
+
+      const bgm = document.getElementById('bgm');
+      if (bgm) {
+        bgm.volume = 0.35;
+        const tryPlay = () => {
+          const promise = bgm.play();
+          if (promise && promise.catch) {
+            promise.catch(() => {
+              document.body.addEventListener('click', tryPlay, { once: true });
+              document.body.addEventListener('touchstart', tryPlay, { once: true });
+            });
+          }
+        };
+        tryPlay();
+      }
     });
   </script>
 </body>
